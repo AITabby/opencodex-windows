@@ -1,7 +1,7 @@
 {
   "name": "opencodex",
   "version": "0.1.0",
-  "description": "OpenCodex - The Unified Codex Desktop Unlocker, Custom Model Gateway & Computer Use Router",
+  "description": "OpenCodex for Windows — Local gateway for Codex Desktop",
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -10,7 +10,9 @@
     "postinstall": "tsc"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.0"
+    "@modelcontextprotocol/sdk": "^1.6.0",
+    "sharp": "^0.34.5",
+    "screenshot-desktop": "^1.15.4"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
