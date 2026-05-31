@@ -318,14 +318,27 @@ stream_idle_timeout_ms = 600000
   public restartCodexDesktop() {
     console.log("[OpenCodex] Executing background restart of Codex Desktop...");
     const isWin = process.platform === "win32";
-    const cmd = isWin
-      ? `taskkill /f /im "Codex.exe" /t 2>nul & taskkill /f /im "Codex Helper.exe" /t 2>nul & timeout /t 2 /nobreak >nul & start /b "" "codex://" 2>nul || start /b "" "shell:AppsFolder\\Codex" 2>nul || start /b "" "Codex" 2>nul`
-      : 'killall Codex "Codex Helper" "Codex Helper (Renderer)" "Codex Helper (GPU)" SkyComputerUseClient SkyComputerUseService bare-modifier-monitor 2>/dev/null; sleep 1.5; open -a Codex';
-    try {
-      execSync(cmd, { timeout: 10000, stdio: "ignore", windowsHide: true });
-      console.log("[OpenCodex] Codex restart triggered.");
-    } catch {
-      console.log("[OpenCodex] Codex restart command issued.");
+    if (isWin) {
+      // Kill Codex processes (lowercase on Windows)
+      try { execSync('taskkill /f /im "codex.exe" /t 2>nul', { windowsHide: true }); } catch {}
+      try { execSync('timeout /t 2 /nobreak >nul', { windowsHide: true }); } catch {}
+      // Launch Codex via multiple methods
+      const launchAttempts = [
+        'start "" "codex://"',
+        'start "" "Codex"',
+        'codex',
+        `start "" "%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\codex.exe"`
+      ];
+      for (const cmd of launchAttempts) {
+        try {
+          execSync(cmd, { timeout: 3000, windowsHide: true, stdio: "ignore" });
+          break;
+        } catch {}
+      }
+    } else {
+      try {
+        execSync('killall Codex "Codex Helper" "Codex Helper (Renderer)" "Codex Helper (GPU)" SkyComputerUseClient SkyComputerUseService bare-modifier-monitor 2>/dev/null; sleep 1.5; open -a Codex', { timeout: 10000 });
+      } catch {}
     }
   }
 
