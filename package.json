@@ -1,0 +1,21 @@
+{
+  "name": "opencodex",
+  "version": "0.1.0",
+  "description": "OpenCodex - Local gateway for Codex Desktop on Windows. Custom API providers, web dashboard, Vision Bridge, Computer Use.",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "dev": "tsc --watch",
+    "postinstall": "tsc"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.6.0",
+    "screenshot-desktop": "^1.15.4",
+    "sharp": "^0.34.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "typescript": "^5.9.3"
+  }
+}
