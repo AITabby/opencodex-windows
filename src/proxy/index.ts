@@ -6,10 +6,10 @@
  */
 
 import http from "node:http";
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { execSync, spawn } from "node:child_process";
+import { execSync } from "node:child_process";
 
 import {
   responsesToChat,
@@ -316,56 +316,15 @@ stream_idle_timeout_ms = 600000
   }
 
   public restartCodexDesktop() {
-    console.log("[OpenCodex] Executing background restart of Codex Desktop...");
     const isWin = process.platform === "win32";
     if (isWin) {
-      // Find main Codex.exe path before killing
-      let mainExe = "";
-      try {
-        const result = execSync(
-          'powershell -NoProfile -Command "Get-Process Codex | Select-Object -ExpandProperty Path" 2>nul',
-          { encoding: "utf-8", windowsHide: true, timeout: 5000 }
-        );
-        mainExe = result?.toString().trim().split("\n").pop()?.trim() || "";
-      } catch {}
-
-      // Kill all codex processes
-      try { execSync('taskkill /f /im "codex.exe" /t 2>nul', { windowsHide: true }); } catch {}
-
-      // Wait for cleanup
-      try { execSync('timeout /t 3 /nobreak >nul', { windowsHide: true }); } catch {}
-
-      if (mainExe && existsSync(mainExe)) {
-        try {
-          spawn(mainExe, [], { detached: true, stdio: "ignore" }).unref();
-          console.log(`[OpenCodex] Launched: ${mainExe}`);
-          return;
-        } catch {}
-      }
-
-      // Last resort: scan bin/<hash>/codex.exe (may launch helper process)
-      const localAppData = process.env.LOCALAPPDATA || "";
-      if (localAppData) {
-        const binDir = join(localAppData, "OpenAI", "Codex", "bin");
-        if (existsSync(binDir)) {
-          const dirs = readdirSync(binDir).filter(d => /^[a-f0-9]{16}$/.test(d));
-          for (const dir of dirs) {
-            const exe = join(binDir, dir, "codex.exe");
-            if (existsSync(exe)) {
-              try {
-                spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
-                console.log(`[OpenCodex] Launched (helper): ${exe}`);
-                return;
-              } catch {}
-            }
-          }
-        }
-      }
-    } else {
-      try {
-        execSync('killall Codex "Codex Helper" "Codex Helper (Renderer)" "Codex Helper (GPU)" SkyComputerUseClient SkyComputerUseService bare-modifier-monitor 2>/dev/null; sleep 1.5; open -a Codex', { timeout: 10000 });
-      } catch {}
+      console.log("[OpenCodex] Configuration updated. Please restart Codex Desktop manually to apply changes.");
+      return;
     }
+    console.log("[OpenCodex] Executing background restart of Codex Desktop...");
+    try {
+      execSync('killall Codex "Codex Helper" "Codex Helper (Renderer)" "Codex Helper (GPU)" SkyComputerUseClient SkyComputerUseService bare-modifier-monitor 2>/dev/null; sleep 1.5; open -a Codex', { timeout: 10000 });
+    } catch {}
   }
 
   start(port: number) {
