@@ -255,7 +255,7 @@ export class ProxyServer {
       const managedTop = `# >>> opencodex managed >>>
 model = "deepseek-v4-flash"
 model_provider = "opencodex"
-model_catalog_json = "${catalogPath}"
+model_catalog_json = "${catalogPath.replace(/\\/g, "/")}"
 # <<< opencodex managed <<<
 `;
 
@@ -292,7 +292,7 @@ stream_idle_timeout_ms = 600000
       const managedTop = `# >>> opencodex managed >>>
 model = "deepseek-v4-flash"
 model_provider = "opencodex"
-model_catalog_json = "${catalogPath}"
+model_catalog_json = "${catalogPath.replace(/\\/g, "/")}"
 # <<< opencodex managed <<<
 `;
       const managedProvider = `# >>> opencodex managed >>>
@@ -319,7 +319,7 @@ stream_idle_timeout_ms = 600000
     console.log("[OpenCodex] Executing background cold-restart of Codex Desktop...");
     const isWin = process.platform === "win32";
     const cmd = isWin
-      ? 'taskkill /f /im "Codex.exe" /t 2>nul & taskkill /f /im "Codex Helper.exe" /t 2>nul & timeout /t 2 /nobreak >nul & start "" "Codex"'
+      ? 'start /b taskkill /f /im "Codex.exe" /t 2>nul & start /b taskkill /f /im "Codex Helper.exe" /t 2>nul & timeout /t 2 /nobreak >nul & start "" "Codex"'
       : 'killall Codex "Codex Helper" "Codex Helper (Renderer)" "Codex Helper (GPU)" SkyComputerUseClient SkyComputerUseService bare-modifier-monitor 2>/dev/null; sleep 1.5; open -a Codex';
     exec(cmd, (err, stdout, stderr) => {
       if (err) {

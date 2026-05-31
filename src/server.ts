@@ -190,7 +190,7 @@ class OpenCodex {
     console.log(`[OpenCodex] Dashboard → ${url}`);
     try {
       const openCmd = process.platform === "win32" ? "start" : "open";
-      execSync(`${openCmd} "${url}"`, { timeout: 3000 });
+      execSync(`${openCmd} "${url}"`, { timeout: 3000, windowsHide: true });
     } catch {}
     const transport = new StdioServerTransport();
     await this.mcp.connect(transport);
