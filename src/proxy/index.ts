@@ -9,7 +9,7 @@ import http from "node:http";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
+import { exec } from "node:child_process";
 
 import {
   responsesToChat,
@@ -141,12 +141,29 @@ export class ProxyServer {
   }
 
   private buildCatalogFromModelNames(names: string[]): any {
-    return {
-      models: names.map((name) => ({
-        slug: name,
-        model: name,
-        display_name: name,
-        description: `Custom model: ${name}`,
+    const providers = new Map<string, ProviderConfig>();
+    for (const p of this.config.providers) providers.set(p.name, p);
+
+    const models: any[] = [];
+    for (const entry of names) {
+      let provider = "";
+      let modelName = entry;
+      if (entry.includes(":")) {
+        const parts = entry.split(":");
+        provider = parts[0].trim();
+        modelName = parts.slice(1).join(":").trim();
+      }
+      if (provider && !providers.has(provider)) {
+        this.config.providers.push({ name: provider, base_url: "", api_key: "" });
+        providers.set(provider, { name: provider, base_url: "", api_key: "" });
+        this.saveConfig();
+      }
+      models.push({
+        slug: modelName,
+        model: modelName,
+        display_name: modelName,
+        provider,
+        description: `Custom model: ${modelName}${provider ? ` (${provider})` : ""}`,
         context_window: 200000,
         max_context_window: 200000,
         auto_compact_token_limit: 120000,
@@ -177,21 +194,25 @@ export class ProxyServer {
         base_instructions: "You are a coding agent running in Codex through a local BYOK shim.",
         model_messages: {
           instructions_template: "You are Codex running on {model_name} through a local all-model shim. Be a helpful, direct coding collaborator.",
-          instructions_variables: { model_name: name }
+          instructions_variables: { model_name: modelName }
         },
         supports_computer_use: true,
         supports_mcp: true,
         vision_bridge_enabled: false
-      }))
-    };
+      });
+    }
+    return { models };
   }
 
 
-  private findProvider(model: string): ProviderConfig | null {
+  private findProvider(model: string, catalogEntry?: any): ProviderConfig | null {
+    if (catalogEntry?.provider) {
+      return this.config.providers.find(p => p.name === catalogEntry.provider) || null;
+    }
     if (model.startsWith("mimo")) {
       return this.config.providers.find(p => p.name === "opencode") || null;
     }
-    return this.config.providers.find(p => p.name !== "opencode") || this.config.providers[0] || null;
+    return this.config.providers[0] || null;
   }
 
   private resolveKey(raw: string): string {
@@ -295,17 +316,15 @@ stream_idle_timeout_ms = 600000
   }
 
   public restartCodexDesktop() {
-    console.log("[OpenCodex] Executing background restart of Codex Desktop...");
-    const isWin = process.platform === "win32";
-    const cmd = isWin
-      ? 'taskkill /f /im "Codex.exe" /t 2>nul & taskkill /f /im "Codex Helper.exe" /t 2>nul & timeout /t 2 /nobreak >nul & start "" "Codex"'
-      : 'killall Codex "Codex Helper" "Codex Helper (Renderer)" "Codex Helper (GPU)" SkyComputerUseClient SkyComputerUseService bare-modifier-monitor 2>/dev/null; sleep 1.5; open -a Codex';
-    try {
-      execSync(cmd, { timeout: 10000, stdio: "ignore" });
-      console.log("[OpenCodex] Codex Desktop restart triggered.");
-    } catch {
-      console.log("[OpenCodex] Codex restart command issued (may need manual reopen).");
-    }
+    console.log("[OpenCodex] Executing background cold-restart of Codex Desktop...");
+    const cmd = 'killall Codex "Codex Helper" "Codex Helper (Renderer)" "Codex Helper (GPU)" SkyComputerUseClient SkyComputerUseService bare-modifier-monitor 2>/dev/null; kill -9 $(ps aux | grep -i "codex app-server" | grep -v "grep" | awk \'{print $2}\') 2>/dev/null; sleep 1.5; open -a Codex';
+    exec(cmd, (err, stdout, stderr) => {
+      if (err) {
+        console.error(`[OpenCodex] Codex restart completed with errors or status: ${err.message}`);
+      } else {
+        console.log("[OpenCodex] Codex Desktop successfully restarted in the background.");
+      }
+    });
   }
 
   start(port: number) {
@@ -372,19 +391,14 @@ stream_idle_timeout_ms = 600000
       try {
         const data = JSON.parse(body);
 
-        this.config.providers = [
-          {
-            name: data.primary.name,
-            base_url: data.primary.base_url,
-            api_key: data.primary.api_key
-          },
-          {
-            name: "opencode",
-            base_url: data.opencode.base_url || "https://opencode.ai/zen/go/v1",
-            api_key: data.opencode.api_key || "",
-            vision_model: data.opencode.model || "mimo-v2.5"
-          }
-        ];
+        if (data.providers && Array.isArray(data.providers)) {
+          this.config.providers = data.providers;
+        } else {
+          this.config.providers = [
+            { name: data.primary.name, base_url: data.primary.base_url, api_key: data.primary.api_key },
+            { name: "opencode", base_url: data.opencode.base_url || "https://opencode.ai/zen/go/v1", api_key: data.opencode.api_key || "", vision_model: data.opencode.model || "mimo-v2.5" }
+          ];
+        }
 
         this.saveConfig();
 
@@ -579,7 +593,7 @@ stream_idle_timeout_ms = 600000
     const catalogEntry = catalog.models?.find((m: any) => m.slug === requestedModel);
     const mappedModelName = (catalogEntry && catalogEntry.model) ? catalogEntry.model : requestedModel;
 
-    const provider = this.findProvider(mappedModelName);
+    const provider = this.findProvider(mappedModelName, catalogEntry);
     if (!provider) {
       res.writeHead(400, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ error: `Unknown model: ${requestedModel}` }));
@@ -728,7 +742,9 @@ stream_idle_timeout_ms = 600000
   private async handleChat(body: string, res: http.ServerResponse) {
     const reqBody = JSON.parse(body);
     const model = reqBody.model || "";
-    const provider = this.findProvider(model);
+    const catalog = this.getModelCatalog();
+    const catalogEntry = catalog.models?.find((m: any) => m.slug === model);
+    const provider = this.findProvider(model, catalogEntry);
     
     if (!provider) {
       res.writeHead(400, { "Content-Type": "application/json" });

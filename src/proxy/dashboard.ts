@@ -520,7 +520,75 @@ export function getDashboardHtml(): string {
     .toast.toast-error {
       background: rgba(239, 68, 68, 0.95);
     }
-  </style>
+      /* Custom Confirm Dialog */
+      .modal-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.25s ease;
+      }
+      .modal-overlay.show {
+        opacity: 1;
+        pointer-events: all;
+      }
+      .modal-box {
+        background: rgba(20, 15, 40, 0.95);
+        border: 1px solid rgba(255,255,255,0.1);
+        border-radius: 18px;
+        padding: 2rem 2.5rem;
+        max-width: 420px;
+        width: 90%;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 80px rgba(147,51,234,0.08);
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        text-align: center;
+      }
+      .modal-box p {
+        font-size: 1rem;
+        line-height: 1.5;
+        color: var(--color-text);
+      }
+      .modal-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 0.5rem;
+      }
+      .modal-actions button {
+        flex: 1;
+        padding: 0.75rem 1rem;
+        border-radius: 10px;
+        font-family: 'Outfit', sans-serif;
+        font-weight: 600;
+        font-size: 0.95rem;
+        border: none;
+        cursor: pointer;
+        transition: var(--transition-standard);
+      }
+      .modal-btn-cancel {
+        background: rgba(255,255,255,0.06);
+        color: var(--color-text-muted);
+      }
+      .modal-btn-cancel:hover {
+        background: rgba(255,255,255,0.1);
+      }
+      .modal-btn-confirm {
+        background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+        color: #fff;
+        box-shadow: 0 4px 15px rgba(168,85,247,0.3);
+      }
+      .modal-btn-confirm:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 6px 20px rgba(168,85,247,0.45);
+      }
+    </style>
 </head>
 <body>
   
@@ -563,68 +631,22 @@ export function getDashboardHtml(): string {
         
         <form id="config-form" style="display: flex; flex-direction: column; gap: 1.25rem;">
           
-          <!-- Primary Model Provider Dropdown -->
+          <!-- Providers List -->
           <div class="form-group">
-            <label for="primary-provider" id="i18n-label-provider">Primary Model Provider</label>
-            <select id="primary-provider" onchange="onProviderSelectChange()">
-              <option value="deepseek">DeepSeek Official (官方)</option>
-              <option value="siliconflow">SiliconFlow (硅基流动)</option>
-              <option value="opencode">OpenCode (开放代码)</option>
-              <option value="openai">OpenAI Official (官方)</option>
-              <option value="custom">Custom OpenAI-Compatible (自定义 OpenAI 兼容接口)</option>
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label for="primary-key" id="i18n-label-primary-key">API Key</label>
-            <div class="input-wrapper">
-              <input type="password" id="primary-key" placeholder="Enter API Key (sk-...)">
-              <button type="button" class="toggle-visibility" onclick="togglePass('primary-key')">
-                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-          
-          <div class="form-group" id="primary-url-group">
-            <label for="primary-url" id="i18n-label-primary-url">Endpoint Base URL</label>
-            <input type="text" id="primary-url" placeholder="https://api.deepseek.com/v1">
-          </div>
-
-          <div class="form-group">
-            <label for="model-names" id="i18n-label-models">Models（每行一个模型名 / One per line）</label>
-            <textarea id="model-names" rows="5" placeholder="deepseek-v4-flash
-deepseek-v4-pro
-gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--glass-border);padding:0.85rem 1rem;border-radius:10px;color:#fff;font-family:'JetBrains Mono',monospace;font-size:0.85rem;resize:vertical;transition:var(--transition-standard);outline:none;"></textarea>
-            <p style="font-size:0.75rem;color:var(--color-text-muted);margin-top:0.3rem;" id="i18n-model-hint">Type new model names here. Existing models are preserved. Use checkboxes below to show/hide.</p>
+            <label id="i18n-label-providers">API Providers</label>
+            <div id="providers-container" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
+            <button type="button" class="console-btn" onclick="addProviderRow()" style="margin-top:0.5rem;width:100%;padding:0.6rem;">+ Add Provider</button>
           </div>
 
           <hr style="border: none; border-top: 1px solid rgba(255,255,255,0.06); margin: 0.5rem 0;">
 
-          <!-- Vision Fallback Provider -->
+          <!-- Model Names -->
           <div class="form-group">
-            <label for="opencode-key" id="i18n-label-oc-key">Vision Fallback API Key</label>
-            <div class="input-wrapper">
-              <input type="password" id="opencode-key" placeholder="Optional for vision description fallback.">
-              <button type="button" class="toggle-visibility" onclick="togglePass('opencode-key')">
-                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
-                </svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="form-group">
-            <label for="opencode-url" id="i18n-label-oc-url">Vision Fallback Base URL</label>
-            <input type="text" id="opencode-url" placeholder="https://opencode.ai/zen/go/v1">
-          </div>
-
-          <div class="form-group">
-            <label for="opencode-model" id="i18n-label-oc-model">Vision Fallback Model</label>
-            <input type="text" id="opencode-model" placeholder="mimo-v2.5">
+            <label for="model-names" id="i18n-label-models">Models（每行一个，格式: 供应商名:模型名）</label>
+            <textarea id="model-names" rows="5" placeholder="opencode:deepseek-v4-flash
+jdcloud:GLM-5
+iflytek:astron-code-latest" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--glass-border);padding:0.85rem 1rem;border-radius:10px;color:#fff;font-family:'JetBrains Mono',monospace;font-size:0.85rem;resize:vertical;transition:var(--transition-standard);outline:none;"></textarea>
+            <p style="font-size:0.75rem;color:var(--color-text-muted);margin-top:0.3rem;" id="i18n-model-hint">Format: <b>provider:model</b> — one per line. Providers are auto-created, fill in their credentials above.</p>
           </div>
 
           <div style="display: flex; align-items: center; gap: 0.75rem; margin-top: 0.5rem;">
@@ -691,6 +713,16 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
     <span>Configuration Updated Successfully</span>
   </div>
 
+  <div class="modal-overlay" id="confirm-modal">
+    <div class="modal-box">
+      <p id="confirm-msg">Are you sure?</p>
+      <div class="modal-actions">
+        <button class="modal-btn-cancel" id="confirm-cancel">Cancel</button>
+        <button class="modal-btn-confirm" id="confirm-ok">Confirm</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // i18n Dictionary
     const i18nDict = {
@@ -700,6 +732,7 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
         status: "Active & Intercepting",
         panelApiTitle: "API Settings & Keys",
         labelProvider: "Primary Model Provider",
+        labelProviders: "API Providers",
         labelPrimaryKey: "API Key",
         labelPrimaryUrl: "Endpoint Base URL",
         labelOcKey: "Vision Fallback API Key",
@@ -736,7 +769,7 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
         subtitle: "面向新手的自定义模型控制面板",
         status: "运行中 & 实时拦截",
         panelApiTitle: "API 密钥与接口设置",
-        labelProvider: "主模型服务商",
+        labelProviders: "API Providers",
         labelPrimaryKey: "API 密钥 (Key)",
         labelPrimaryUrl: "接口地址 (Base URL)",
         labelModels: "模型（每行一个模型名）",
@@ -763,10 +796,15 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
         toastRestarting: "正在重启 Codex Desktop...",
         toastRestarted: "Codex Desktop 重启成功！",
         labelModels: "模型（每行一个模型名）",
-        modelHint: "在此输入新增的模型名。已有模型会自动保留，可通过下方勾选框显示/隐藏。",
+        modelHint: "Format: <b>provider:model</b> — one per line. Providers are auto-created, fill in their credentials above.",
         btnReset: "↺ 还原原生",
         toastResetting: "正在还原原生 Codex...",
-        toastResetDone: "还原完成，Codex 重启中."
+        toastResetDone: "还原完成，Codex 重启中.",
+        labelProviders: "API Providers",
+        providerName: "Name",
+        providerUrl: "Base URL",
+        providerKey: "API Key",
+        addProvider: "+ Add Provider"
       }
     };
 
@@ -794,14 +832,9 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
         </svg>
         \${t.panelApiTitle}\`;
       
-      document.getElementById('i18n-label-provider').innerText = t.labelProvider;
-      document.getElementById('i18n-label-primary-key').innerText = t.labelPrimaryKey;
-      document.getElementById('i18n-label-primary-url').innerText = t.labelPrimaryUrl;
+      document.getElementById('i18n-label-providers').innerText = t.labelProviders;
       document.getElementById('i18n-label-models').innerText = t.labelModels;
       document.getElementById('i18n-model-hint').innerText = t.modelHint;
-      document.getElementById('i18n-label-oc-key').innerText = t.labelOcKey;
-      document.getElementById('i18n-label-oc-url').innerText = t.labelOcUrl;
-      document.getElementById('i18n-label-oc-model').innerText = t.labelOcModel;
       document.getElementById('i18n-btn-save-config').innerText = t.btnSaveConfig;
       
       document.getElementById('i18n-panel-models-title').innerHTML = \`
@@ -837,24 +870,21 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
     }
 
     // Handles provider select dropdown changes
-    function onProviderSelectChange() {
-      const select = document.getElementById('primary-provider');
-      const urlInput = document.getElementById('primary-url');
-      const val = select.value;
-
-      urlInput.value = urlPresets[val] || '';
-      
-      // If custom, let user type freely, otherwise lock or highlight it
-      if (val === 'custom') {
-        urlInput.removeAttribute('disabled');
-        urlInput.style.opacity = '1';
-      } else {
-        urlInput.setAttribute('disabled', 'true');
-        urlInput.style.opacity = '0.7';
-      }
+    function addProviderRow(name, url, key) {
+      const container = document.getElementById('providers-container');
+      const idx = container.children.length;
+      const div = document.createElement('div');
+      div.className = 'provider-row';
+      div.style.cssText = 'display:flex;gap:0.5rem;align-items:center;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);border-radius:10px;padding:0.6rem;flex-wrap:wrap;';
+      div.innerHTML = \`
+        <input class="prov-name" placeholder="name" value="\${name || ''}" style="width:90px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);padding:0.5rem;border-radius:6px;color:#fff;font-family:Outfit,sans-serif;font-size:0.85rem;">
+        <input class="prov-url" placeholder="https://..." value="\${url || ''}" style="flex:1;min-width:120px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);padding:0.5rem;border-radius:6px;color:#fff;font-family:Outfit,sans-serif;font-size:0.85rem;">
+        <input class="prov-key" type="password" placeholder="sk-..." value="\${key || ''}" style="flex:1;min-width:100px;background:rgba(0,0,0,0.25);border:1px solid rgba(255,255,255,0.06);padding:0.5rem;border-radius:6px;color:#fff;font-family:Outfit,sans-serif;font-size:0.85rem;">
+        <button type="button" onclick="this.parentElement.remove()" style="background:rgba(239,68,68,0.15);border:1px solid rgba(239,68,68,0.3);color:#ef4444;width:28px;height:28px;border-radius:6px;cursor:pointer;font-size:0.8rem;">✕</button>
+      \`;
+      container.appendChild(div);
     }
 
-    // Visibility toggle
     function togglePass(id) {
       const inp = document.getElementById(id);
       inp.type = inp.type === 'password' ? 'text' : 'password';
@@ -887,33 +917,13 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
         const data = await configResp.json();
         const modelsData = await modelsResp.json();
         
-        const primaryProvider = data.providers.find(p => p.name !== 'mimo' && p.name !== 'opencode');
-        const ocProvider = data.providers.find(p => p.name === 'mimo' || p.name === 'opencode');
-        
-        if (primaryProvider) {
-          const select = document.getElementById('primary-provider');
-          const isPreset = ['deepseek', 'siliconflow', 'opencode', 'openai'].includes(primaryProvider.name);
-          
-          select.value = isPreset ? primaryProvider.name : 'custom';
-          document.getElementById('primary-key').value = primaryProvider.api_key || '';
-          document.getElementById('primary-url').value = primaryProvider.base_url || '';
-          
-          if (select.value === 'custom') {
-            document.getElementById('primary-url').removeAttribute('disabled');
-            document.getElementById('primary-url').style.opacity = '1';
-          } else {
-            document.getElementById('primary-url').setAttribute('disabled', 'true');
-            document.getElementById('primary-url').style.opacity = '0.7';
-          }
-        }
-        if (ocProvider) {
-          document.getElementById('opencode-key').value = ocProvider.api_key || '';
-          document.getElementById('opencode-url').value = ocProvider.base_url || '';
-          document.getElementById('opencode-model').value = ocProvider.vision_model || 'mimo-v2.5';
-        }
+        // Populate provider rows
+        const container = document.getElementById('providers-container');
+        container.innerHTML = '';
+        (data.providers || []).forEach(p => addProviderRow(p.name, p.base_url, p.api_key));
 
         // Populate model names textarea from catalog
-        const modelNames = (modelsData.catalog || []).map((m) => m.model).join('\\n');
+        const modelNames = (modelsData.catalog || []).map((m) => m.provider ? m.provider + ':' + m.model : m.model).join('\\n');
         document.getElementById('model-names').value = modelNames;
       } catch (err) {
         showToast(currentLang === 'zh' ? '加载配置失败' : 'Failed to load configs', true);
@@ -973,16 +983,17 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
     document.getElementById('config-form').onsubmit = async (e) => {
       e.preventDefault();
       
-      const providerVal = document.getElementById('primary-provider').value;
-      const primaryKey = document.getElementById('primary-key').value.trim();
-      const primaryUrl = document.getElementById('primary-url').value.trim();
-      
-      const ocKey = document.getElementById('opencode-key').value.trim();
-      const ocUrl = document.getElementById('opencode-url').value.trim();
-      const ocModel = document.getElementById('opencode-model').value.trim() || 'mimo-v2.5';
       const restartChecked = document.getElementById('config-restart-checkbox').checked;
       
-      // Parse model names (one per line, trim, filter empty)
+      // Build providers array from UI
+      const providerRows = document.querySelectorAll('#providers-container .provider-row');
+      const providers = Array.from(providerRows).map(row => ({
+        name: row.querySelector('.prov-name').value.trim(),
+        base_url: row.querySelector('.prov-url').value.trim(),
+        api_key: row.querySelector('.prov-key').value.trim()
+      })).filter(p => p.name && p.base_url);
+
+      // Parse model names
       const modelNames = document.getElementById('model-names').value
         .split('\\n')
         .map((s) => s.trim())
@@ -997,8 +1008,7 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            primary: { name: providerVal, api_key: primaryKey, base_url: primaryUrl },
-            opencode: { api_key: ocKey, base_url: ocUrl, model: ocModel },
+            providers,
             models: modelNames,
             restart: restartChecked
           })
@@ -1094,25 +1104,40 @@ gpt-4o" style="width:100%;background:rgba(0,0,0,0.25);border:1px solid var(--gla
       }
     }
 
+    // Custom confirm dialog
+    function showConfirm(msg, onConfirm) {
+      const modal = document.getElementById('confirm-modal');
+      document.getElementById('confirm-msg').innerText = msg;
+      document.getElementById('confirm-ok').onclick = () => {
+        modal.classList.remove('show');
+        onConfirm();
+      };
+      document.getElementById('confirm-cancel').onclick = () => modal.classList.remove('show');
+      modal.classList.add('show');
+    }
+
     // Reset Codex to native state
     async function resetCodex() {
-      showToast(i18nDict[currentLang].toastResetting);
-      try {
-        const response = await fetch('/api/reset', {
-          method: 'POST'
-        });
-        if (response.ok) {
-          setTimeout(() => {
-            showToast(i18nDict[currentLang].toastResetDone);
-            loadConfig();
-            loadModels();
-          }, 2500);
-        } else {
-          showToast(currentLang === 'zh' ? '还原失败' : 'Reset failed', true);
+      const msg = currentLang === 'zh' ? '还原后 Codex 显示官方模型，自定义模型的对话将被隐藏。重新填写 API 即可恢复。' : 'Reset restores native Codex. Conversations for custom models will be hidden until you reconfigure your API.';
+      showConfirm(msg, async () => {
+        showToast(i18nDict[currentLang].toastResetting);
+        try {
+          const response = await fetch('/api/reset', {
+            method: 'POST'
+          });
+          if (response.ok) {
+            setTimeout(() => {
+              showToast(i18nDict[currentLang].toastResetDone);
+              loadConfig();
+              loadModels();
+            }, 2500);
+          } else {
+            showToast(currentLang === 'zh' ? '还原失败' : 'Reset failed', true);
+          }
+        } catch (err) {
+          showToast(i18nDict[currentLang].toastConnFailed, true);
         }
-      } catch (err) {
-        showToast(i18nDict[currentLang].toastConnFailed, true);
-      }
+      });
     }
 
     // Live Logs SSE Setup
