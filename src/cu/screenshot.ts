@@ -2,16 +2,14 @@ import { spawnSync } from "node:child_process";
 import { writeFileSync, readFileSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const screenshotDesktop: any = undefined;
+import screenshot from "screenshot-desktop";
 
 export class ScreenshotTaker {
   async capture(): Promise<Buffer> {
     try {
-      return this.psCapture();
+      return await this.fallbackCapture();
     } catch {
-      return this.fallbackCapture();
+      return this.psCapture();
     }
   }
 
@@ -41,7 +39,6 @@ export class ScreenshotTaker {
   }
 
   private async fallbackCapture(): Promise<Buffer> {
-    const { screenshot } = await import("screenshot-desktop");
     return screenshot({ format: "png" }) as Promise<Buffer>;
   }
 }
