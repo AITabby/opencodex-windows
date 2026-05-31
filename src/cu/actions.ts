@@ -13,10 +13,44 @@ export interface WindowInfo {
   height: number;
 }
 
+const WIN32 = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Collections.Generic;
+public class WinAPI {
+  [DllImport("user32.dll")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
+  [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+  [DllImport("user32.dll")] public static extern int ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
+  [DllImport("user32.dll")] public static extern IntPtr GetDesktopWindow();
+  [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr hWnd, int uCmd);
+  [DllImport("user32.dll")] public static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);
+  [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);
+  [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
+  [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+  public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+  public const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
+  public const uint MOUSEEVENTF_LEFTUP = 0x0004;
+  public const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
+  public const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+  public const uint MOUSEEVENTF_WHEEL = 0x0800;
+  public const uint MOUSEEVENTF_MOVE = 0x0001;
+}
+"@
+`;
+
 export class ActionPerformer {
   async click(x: number, y: number, button = "left", clicks = 1) {
+    const isRight = button === "right";
+    const down = isRight ? "MOUSEEVENTF_RIGHTDOWN" : "MOUSEEVENTF_LEFTDOWN";
+    const up = isRight ? "MOUSEEVENTF_RIGHTUP" : "MOUSEEVENTF_LEFTUP";
     for (let i = 0; i < clicks; i++) {
-      this.run("click", [String(x), String(y), button === "right" ? "right" : "left"]);
+      this.run("click", [String(x), String(y), down, up]);
     }
   }
 
@@ -53,13 +87,13 @@ export class ActionPerformer {
   }
 
   private run(action: string, args: string[]): string {
-    const script = this.getScript(action, args);
+    const script = WIN32 + "\n" + this.getScript(action, args);
     const scriptPath = join(tmpdir(), `oc-act-${Date.now()}.ps1`);
     try {
       writeFileSync(scriptPath, script, "utf-8");
       const r = spawnSync("powershell", ["-NoProfile", "-File", scriptPath], { timeout: 15000, encoding: "utf-8" });
       if (r.status !== 0) {
-        throw new Error(`PowerShell execution failed: ${(r.stderr || r.stdout || "Unknown").toString().trim().slice(0, 200)}`);
+        throw new Error(`PS fail: ${(r.stderr || r.stdout || "").toString().trim().slice(0, 200)}`);
       }
       return r.stdout?.trim() || "";
     } finally {
@@ -72,61 +106,43 @@ export class ActionPerformer {
 
     switch (action) {
       case "click": {
-        const [x, y, btn] = a;
-        const isRight = btn === "right";
-        return [
-          "Add-Type -AssemblyName System.Windows.Forms",
-          "[System.Windows.Forms.Cursor]::Position = New-Object Drawing.Point($x, $y)",
-          `$event = [Windows.Forms.MouseButtons]::${isRight ? "Right" : "Left"}`,
-          "[Windows.Forms.Application]::DoEvents()",
-          "Start-Sleep -Milliseconds 50",
-          `[Windows.Forms.SendKeys]::SendWait(${isRight ? "'+{F10}'" : "' '".replace(/^'(.+)'$/, "'$1'")})`,
-          "[Windows.Forms.Application]::DoEvents()"
-        ].join("\n");
+        const [x, y, down, up] = a;
+        return `[WinAPI]::SetCursorPos(${x}, ${y})
+Start-Sleep -Milliseconds 50
+[WinAPI]::mouse_event([WinAPI]::${down}, 0, 0, 0, 0)
+Start-Sleep -Milliseconds 50
+[WinAPI]::mouse_event([WinAPI]::${up}, 0, 0, 0, 0)`;
       }
 
       case "drag": {
         const [fx, fy, tx, ty] = a;
-        return [
-          "Add-Type -AssemblyName System.Windows.Forms",
-          "Add-Type -AssemblyName System.Drawing",
-          `function Drag-Mouse {`,
-          `  param([int]$fromX,[int]$fromY,[int]$toX,[int]$toY)`,
-          "  [System.Windows.Forms.Cursor]::Position = New-Object Drawing.Point($fromX, $fromY)",
-          "  [Windows.Forms.Application]::DoEvents()",
-          "  Start-Sleep -Milliseconds 50",
-          "  $steps = 20",
-          "  for ($i = 1; $i -le $steps; $i++) {",
-          "    $t = $i / $steps",
-          "    $px = $fromX + ($toX - $fromX) * $t",
-          "    $py = $fromY + ($toY - $fromY) * $t",
-          "    [System.Windows.Forms.Cursor]::Position = New-Object Drawing.Point([int]$px, [int]$py)",
-          "    [Windows.Forms.Application]::DoEvents()",
-          "    Start-Sleep -Milliseconds 10",
-          "  }",
-          "}",
-          `Drag-Mouse -fromX ${fx} -fromY ${fy} -toX ${tx} -toY ${ty}`
-        ].join("\n");
+        return `[WinAPI]::SetCursorPos(${fx}, ${fy})
+Start-Sleep -Milliseconds 50
+[WinAPI]::mouse_event([WinAPI]::MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0)
+$steps = 20
+for ($i = 1; $i -le $steps; $i++) {
+  $t = $i / $steps
+  $px = ${fx} + (${tx} - ${fx}) * $t
+  $py = ${fy} + (${ty} - ${fy}) * $t
+  [WinAPI]::SetCursorPos([int]$px, [int]$py)
+  Start-Sleep -Milliseconds 10
+}
+Start-Sleep -Milliseconds 50
+[WinAPI]::mouse_event([WinAPI]::MOUSEEVENTF_LEFTUP, 0, 0, 0, 0)`;
       }
 
       case "scroll": {
-        const [x, y, dx, dy] = a;
-        return [
-          "Add-Type -AssemblyName System.Windows.Forms",
-          "[System.Windows.Forms.Cursor]::Position = New-Object Drawing.Point($x, $y)",
-          `[System.Windows.Forms.SendKeys]::SendWait('{PGDN}')`,
-          "[Windows.Forms.Application]::DoEvents()"
-        ].join("\n");
+        const [x, y] = a;
+        const dy = parseInt(a[3]) || -3;
+        return `[WinAPI]::SetCursorPos(${x}, ${y})
+[WinAPI]::mouse_event([WinAPI]::MOUSEEVENTF_WHEEL, 0, 0, ${dy * 120}, 0)`;
       }
 
       case "type": {
         const t = esc(a[0]);
-        return [
-          "Add-Type -AssemblyName System.Windows.Forms",
-          `$text = '${t}'`,
-          "Start-Sleep -Milliseconds 100",
-          "[System.Windows.Forms.SendKeys]::SendWait($text)"
-        ].join("\n");
+        return `Add-Type -AssemblyName System.Windows.Forms
+Start-Sleep -Milliseconds 100
+[System.Windows.Forms.SendKeys]::SendWait('${t}')`;
       }
 
       case "key": {
@@ -148,84 +164,39 @@ export class ActionPerformer {
         if (mods.includes("ctrl")) key = "^" + key;
         if (mods.includes("alt")) key = "%" + key;
         if (mods.includes("shift")) key = "+" + key;
-        if (mods.includes("cmd") || mods.includes("win")) key = "^{" + key + "}";
-        return [
-          "Add-Type -AssemblyName System.Windows.Forms",
-          `[System.Windows.Forms.SendKeys]::SendWait('${esc(key)}')`
-        ].join("\n");
+        return `Add-Type -AssemblyName System.Windows.Forms
+[System.Windows.Forms.SendKeys]::SendWait('${esc(key)}')`;
       }
 
       case "windows": {
-        return [
-          "Add-Type @'",
-          "using System;",
-          "using System.Runtime.InteropServices;",
-          "using System.Text;",
-          "using System.Collections.Generic;",
-          "public class WinAPI {",
-          "  [DllImport(\"user32.dll\")] static extern IntPtr GetDesktopWindow();",
-          "  [DllImport(\"user32.dll\")] static extern IntPtr GetWindow(IntPtr hWnd, int uCmd);",
-          "  [DllImport(\"user32.dll\")] static extern int GetWindowText(IntPtr hWnd, StringBuilder text, int count);",
-          "  [DllImport(\"user32.dll\")] static extern int GetWindowTextLength(IntPtr hWnd);",
-          "  [DllImport(\"user32.dll\")] static extern bool IsWindowVisible(IntPtr hWnd);",
-          "  [DllImport(\"user32.dll\")] static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);",
-          "  [DllImport(\"user32.dll\")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint pid);",
-          "  [DllImport(\"user32.dll\")] static extern bool SetForegroundWindow(IntPtr hWnd);",
-          "  [DllImport(\"user32.dll\")] static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);",
-          "  public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }",
-          "  public static string GetWindowsJson() {",
-          "    var list = new List<Dictionary<string,object>>();",
-          "    var hWnd = GetDesktopWindow();",
-          "    hWnd = GetWindow(hWnd, 5);",
-          "    while (hWnd != IntPtr.Zero) {",
-          "      if (IsWindowVisible(hWnd)) {",
-          "        int len = GetWindowTextLength(hWnd);",
-          "        if (len > 0) {",
-          "          var sb = new StringBuilder(len + 1);",
-          "          GetWindowText(hWnd, sb, len + 1);",
-          "          RECT r; GetWindowRect(hWnd, out r);",
-          "          uint pid; GetWindowThreadProcessId(hWnd, out pid);",
-          "          try {",
-          "            var proc = System.Diagnostics.Process.GetProcessById((int)pid);",
-          "            list.Add(new Dictionary<string,object>{",
-          "              {\"id\", (int)hWnd}, {\"title\", sb.ToString()},",
-          "              {\"app\", proc.ProcessName}, {\"x\", r.Left}, {\"y\", r.Top},",
-          "              {\"width\", r.Right - r.Left}, {\"height\", r.Bottom - r.Top}",
-          "            });",
-          "          } catch {}",
-          "        }",
-          "      }",
-          "      hWnd = GetWindow(hWnd, 2);",
-          "    }",
-          "    return Newtonsoft.Json.JsonConvert.SerializeObject(list);",
-          "  }",
-          "  public static void FocusWindow(IntPtr hWnd) {",
-          "    ShowWindowAsync(hWnd, 9);",
-          "    SetForegroundWindow(hWnd);",
-          "  }",
-          "}",
-          "'@",
-          "Add-Type -AssemblyName System.Windows.Forms",
-          "try { Add-Type -AssemblyName System.Web.Extensions; $json = (New-Object Web.Script.Serialization.JavaScriptSerializer).Serialize($list) } catch { $json = '[]' }",
-          "$json = [WinAPI]::GetWindowsJson()",
-          "Write-Output $json"
-        ].join("\n");
+        return `$list = New-Object System.Collections.ArrayList
+$hWnd = [WinAPI]::GetDesktopWindow()
+$hWnd = [WinAPI]::GetWindow($hWnd, 5)
+while ($hWnd -ne [IntPtr]::Zero) {
+  if ([WinAPI]::IsWindowVisible($hWnd)) {
+    $len = [WinAPI]::GetWindowTextLength($hWnd)
+    if ($len -gt 0) {
+      $sb = New-Object System.Text.StringBuilder($len + 1)
+      [WinAPI]::GetWindowText($hWnd, $sb, $len + 1)
+      $r = New-Object WinAPI+RECT
+      [WinAPI]::GetWindowRect($hWnd, [ref]$r)
+      $pid = 0
+      [WinAPI]::GetWindowThreadProcessId($hWnd, [ref]$pid)
+      try {
+        $p = Get-Process -Id $pid -ErrorAction Stop
+        $list.Add(@{id = [int]$hWnd; title = $sb.ToString(); app = $p.ProcessName; x = $r.Left; y = $r.Top; width = $r.Right - $r.Left; height = $r.Bottom - $r.Top}) | Out-Null
+      } catch {}
+    }
+  }
+  $hWnd = [WinAPI]::GetWindow($hWnd, 2)
+}
+$list | ConvertTo-Json`;
       }
 
       case "focus": {
         const [wid] = a;
-        return [
-          "Add-Type @'",
-          "using System;",
-          "using System.Runtime.InteropServices;",
-          "public class WinAPI {",
-          "  [DllImport(\"user32.dll\")] static extern bool SetForegroundWindow(IntPtr hWnd);",
-          "  [DllImport(\"user32.dll\")] static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);",
-          "  public static void Focus(IntPtr hWnd) { ShowWindowAsync(hWnd, 9); SetForegroundWindow(hWnd); }",
-          "}",
-          "'@",
-          `[WinAPI]::Focus([IntPtr]${wid})`
-        ].join("\n");
+        return `[WinAPI]::ShowWindowAsync([IntPtr]${wid}, 9)
+[WinAPI]::SetForegroundWindow([IntPtr]${wid})`;
       }
 
       default:

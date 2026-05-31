@@ -556,8 +556,14 @@ stream_idle_timeout_ms = 600000
     }
 
     if (path === "/v1/config") {
+      const safe = {
+        providers: this.config.providers.map(p => ({
+          ...p,
+          api_key: p.api_key ? p.api_key.slice(0, 8) + "..." : ""
+        }))
+      };
       res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(this.config, null, 2));
+      res.end(JSON.stringify(safe, null, 2));
       return;
     }
 
@@ -765,7 +771,14 @@ stream_idle_timeout_ms = 600000
   // ══════════════════════════════════════════════
 
   private async handleChat(body: string, res: http.ServerResponse) {
-    const reqBody = JSON.parse(body);
+    let reqBody: any;
+    try {
+      reqBody = JSON.parse(body);
+    } catch {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: "Invalid JSON body" }));
+      return;
+    }
     const model = reqBody.model || "";
     const catalog = this.getModelCatalog();
     const catalogEntry = catalog.models?.find((m: any) => m.slug === model);
@@ -784,7 +797,7 @@ stream_idle_timeout_ms = 600000
       return;
     }
 
-    const upstreamModel = model;
+    const upstreamModel = (catalogEntry && catalogEntry.model) ? catalogEntry.model : model;
     const isStream = reqBody.stream ?? false;
     
     console.log(`[Chat] Routing ${model} → ${provider.name}/${upstreamModel} (stream=${isStream})`);
