@@ -189,8 +189,7 @@ class OpenCodex {
     const url = "http://localhost:8765/dashboard";
     console.log(`[OpenCodex] Dashboard → ${url}`);
     try {
-      const openCmd = process.platform === "darwin" ? "open" : "start";
-      execSync(`${openCmd} "${url}"`, { timeout: 3000 });
+      execSync(`open "${url}"`, { timeout: 3000 });
     } catch {}
     const transport = new StdioServerTransport();
     await this.mcp.connect(transport);

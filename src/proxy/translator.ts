@@ -1,13 +1,14 @@
 /**
  * OpenCodex Protocol Translation & Vision Bridge Layer
  * Handles translation between Anthropic-style Responses API and OpenAI-style Chat Completions API.
- * Uses `sharp` for screenshot resizing/compression (cross-platform).
+ * Integrates macOS-native `sips` for screenshot resizing/compression.
  * Injects MiMo-v2.5 multimodal descriptions to allow text-only models (like DeepSeek) to run Computer Use.
  */
 
 import { Buffer } from "node:buffer";
 import crypto from "node:crypto";
 import fs from "node:fs";
+import { execSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
 
@@ -882,19 +883,24 @@ function _imageHash(b64Data: string): string {
   return crypto.createHash("sha256").update(b64Data).digest("hex").slice(0, 16);
 }
 
-async function compressImage(b64Data: string): Promise<string> {
+function sipsCompressB64(b64Data: string): string {
+  const tempDir = os.tmpdir();
+  const uniqueId = crypto.randomBytes(8).toString("hex");
+  const tempInputPath = path.join(tempDir, `ocx_in_${uniqueId}.png`);
+  const tempOutputPath = path.join(tempDir, `ocx_out_${uniqueId}.png`);
   try {
-    const sharp = (await import("sharp")).default;
-    const buf = Buffer.from(b64Data, "base64");
-    const resized = await sharp(buf)
-      .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
-      .png()
-      .toBuffer();
-    console.error(`[OpenCodex] Compressed image ${(buf.length / 1024).toFixed(0)}KB → ${(resized.length / 1024).toFixed(0)}KB`);
-    return resized.toString("base64");
+    fs.writeFileSync(tempInputPath, Buffer.from(b64Data, "base64"));
+    execSync(`sips -Z 1200 "${tempInputPath}" --out "${tempOutputPath}" 2>/dev/null`);
+    if (fs.existsSync(tempOutputPath)) {
+      return fs.readFileSync(tempOutputPath).toString("base64");
+    }
   } catch {
-    return b64Data;
+    // fallback to original
+  } finally {
+    try { if (fs.existsSync(tempInputPath)) fs.unlinkSync(tempInputPath); } catch {}
+    try { if (fs.existsSync(tempOutputPath)) fs.unlinkSync(tempOutputPath); } catch {}
   }
+  return b64Data;
 }
 
 export async function describeImageB64(b64Data: string, config?: any): Promise<string | null> {
@@ -907,9 +913,9 @@ export async function describeImageB64(b64Data: string, config?: any): Promise<s
     return cached.desc;
   }
 
-  console.error(`[OpenCodex-VisionBridge] Processing image base64, len=${b64Data?.length}. Compressing with sharp...`);
+  console.error(`[OpenCodex-VisionBridge] Processing image base64, len=${b64Data?.length}. Compressing with sips...`);
 
-  const optimizedB64 = await compressImage(b64Data);
+  const optimizedB64 = sipsCompressB64(b64Data);
 
   // 2. Fetch API key and endpoint for vision fallback provider
   const opencodeProvider = config?.providers?.find((p: any) => p.name === "opencode");
@@ -1006,8 +1012,8 @@ export async function processVisionBridge(body: any, config?: any): Promise<any>
       }
       if (!b64) continue;
 
-      // Always compress with sharp
-      const compressed = await compressImage(b64);
+      // Always compress with sips
+      const compressed = sipsCompressB64(b64);
       if (compressed !== b64) {
         if (item.type === "input_image") {
           content[i] = { ...item, image_url: { url: `data:image/png;base64,${compressed}` } };
