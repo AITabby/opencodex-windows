@@ -9,7 +9,7 @@ import http from "node:http";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { exec } from "node:child_process";
+import { execSync } from "node:child_process";
 
 import {
   responsesToChat,
@@ -327,8 +327,6 @@ stream_idle_timeout_ms = 600000
     } catch {
       console.log("[OpenCodex] Codex restart command issued.");
     }
-  }
-    });
   }
 
   start(port: number) {
