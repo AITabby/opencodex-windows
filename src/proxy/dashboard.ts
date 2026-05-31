@@ -992,25 +992,23 @@ iflytek:astron-code-latest" style="width:100%;background:rgba(0,0,0,0.25);border
 
       try {
         if (restartChecked) {
-          showToast(i18nDict[currentLang].toastRestarting);
+          if (navigator.userAgent.includes('Windows')) {
+            showToast(currentLang === 'zh' ? '配置已更新，请手动重启 Codex Desktop' : 'Config updated. Please manually restart Codex.');
+          } else {
+            showToast(i18nDict[currentLang].toastRestarting);
+          }
         }
         
         const response = await fetch('/api/config', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            providers,
-            models: modelNames,
-            restart: restartChecked
-          })
+          body: JSON.stringify({ providers, models: modelNames, restart: restartChecked })
         });
         
         if (response.ok) {
-          if (restartChecked) {
-            setTimeout(() => {
-              showToast(i18nDict[currentLang].toastRestarted);
-            }, 2500);
-          } else {
+          if (restartChecked && !navigator.userAgent.includes('Windows')) {
+            setTimeout(() => { showToast(i18nDict[currentLang].toastRestarted); }, 2500);
+          } else if (!restartChecked) {
             showToast(i18nDict[currentLang].toastConfigSaved);
           }
           loadConfig();
@@ -1031,7 +1029,11 @@ iflytek:astron-code-latest" style="width:100%;background:rgba(0,0,0,0.25);border
       
       try {
         if (restartChecked) {
-          showToast(i18nDict[currentLang].toastRestarting);
+          if (navigator.userAgent.includes('Windows')) {
+            showToast(currentLang === 'zh' ? '配置已更新，请手动重启 Codex' : 'Config updated. Manually restart Codex.');
+          } else {
+            showToast(i18nDict[currentLang].toastRestarting);
+          }
         }
         
         const response = await fetch('/api/models', {
@@ -1041,14 +1043,12 @@ iflytek:astron-code-latest" style="width:100%;background:rgba(0,0,0,0.25);border
         });
         
         if (response.ok) {
-          if (restartChecked) {
-            setTimeout(() => {
-              showToast(i18nDict[currentLang].toastRestarted);
-            }, 2500);
-          } else {
+          if (restartChecked && !navigator.userAgent.includes('Windows')) {
+            setTimeout(() => { showToast(i18nDict[currentLang].toastRestarted); }, 2500);
+          } else if (!restartChecked) {
             showToast(i18nDict[currentLang].toastModelsSaved);
           }
-          loadModels(); // Refresh
+          loadModels();
         } else {
           showToast(i18nDict[currentLang].toastModelsFailed, true);
         }
@@ -1078,6 +1078,11 @@ iflytek:astron-code-latest" style="width:100%;background:rgba(0,0,0,0.25);border
 
     // Manual or programmatic restart Codex Desktop
     async function restartCodexDesktop() {
+      const isWin = navigator.userAgent.includes('Windows');
+      if (isWin) {
+        showToast(currentLang === 'zh' ? '配置已更新，请手动重启 Codex Desktop' : 'Config updated. Please manually restart Codex Desktop.');
+        return;
+      }
       showToast(i18nDict[currentLang].toastRestarting);
       try {
         const response = await fetch('/api/restart-codex', {
