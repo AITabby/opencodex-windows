@@ -17,6 +17,7 @@ export class ScreenshotTaker {
 
   private psCapture(): Buffer {
     const out = join(tmpdir(), `oc-shot-${Date.now()}.png`);
+    const scriptPath = join(tmpdir(), `oc-shot-${Date.now()}.ps1`);
     const script = [
       "Add-Type -AssemblyName System.Windows.Forms",
       "Add-Type -AssemblyName System.Drawing",
@@ -24,15 +25,19 @@ export class ScreenshotTaker {
       "$bitmap = New-Object Drawing.Bitmap $screen.Width, $screen.Height",
       "$graphics = [Drawing.Graphics]::FromImage($bitmap)",
       "$graphics.CopyFromScreen($screen.Location, [Drawing.Point]::Empty, $screen.Size)",
-      `$bitmap.Save('${out}', [Drawing.Imaging.ImageFormat]::Png)`,
+      `$bitmap.Save('${out.replace(/\\/g, "/")}', [Drawing.Imaging.ImageFormat]::Png)`,
       "$graphics.Dispose()",
       "$bitmap.Dispose()"
     ].join("\n");
-    writeFileSync(join(tmpdir(), "oc-shot.ps1"), script, "utf-8");
-    const r = spawnSync("powershell", ["-NoProfile", "-File", join(tmpdir(), "oc-shot.ps1")], { timeout: 15000 });
-    try { unlinkSync(join(tmpdir(), "oc-shot.ps1")); } catch {}
-    if (r.status !== 0) throw new Error(r.stderr?.toString() || "PowerShell capture failed");
-    return readFileSync(out);
+    writeFileSync(scriptPath, script, "utf-8");
+    try {
+      const r = spawnSync("powershell", ["-NoProfile", "-File", scriptPath], { timeout: 15000 });
+      if (r.status !== 0) throw new Error("PowerShell capture failed");
+      return readFileSync(out);
+    } finally {
+      try { unlinkSync(scriptPath); } catch {}
+      try { unlinkSync(out); } catch {}
+    }
   }
 
   private async fallbackCapture(): Promise<Buffer> {
