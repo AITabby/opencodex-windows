@@ -343,26 +343,7 @@ stream_idle_timeout_ms = 600000
         } catch {}
       }
 
-      // Fallback: scan WindowsApps for Codex.exe
-      const programFiles = process.env.ProgramFiles || "C:\\Program Files";
-      const windowsApps = join(programFiles, "WindowsApps");
-      if (existsSync(windowsApps)) {
-        try {
-          const dirs = readdirSync(windowsApps).filter(d => d.startsWith("OpenAI.Codex_") && d.endsWith("_x64__2p2nqsd0c76g0"));
-          for (const dir of dirs) {
-            const candidate = join(windowsApps, dir, "app", "Codex.exe");
-            if (existsSync(candidate)) {
-              try {
-                spawn(candidate, [], { detached: true, stdio: "ignore" }).unref();
-                console.log(`[OpenCodex] Launched: ${candidate}`);
-                return;
-              } catch {}
-            }
-          }
-        } catch {}
-      }
-
-      // Last resort: scan bin/<hash>/codex.exe
+      // Last resort: scan bin/<hash>/codex.exe (may launch helper process)
       const localAppData = process.env.LOCALAPPDATA || "";
       if (localAppData) {
         const binDir = join(localAppData, "OpenAI", "Codex", "bin");
