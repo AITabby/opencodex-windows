@@ -319,11 +319,50 @@ stream_idle_timeout_ms = 600000
     console.log("[OpenCodex] Executing background restart of Codex Desktop...");
     const isWin = process.platform === "win32";
     if (isWin) {
+      // Find main Codex.exe path before killing
+      let mainExe = "";
+      try {
+        const result = execSync(
+          'powershell -NoProfile -Command "Get-Process Codex | Select-Object -ExpandProperty Path" 2>nul',
+          { encoding: "utf-8", windowsHide: true, timeout: 5000 }
+        );
+        mainExe = result?.toString().trim().split("\n").pop()?.trim() || "";
+      } catch {}
+
+      // Kill all codex processes
       try { execSync('taskkill /f /im "codex.exe" /t 2>nul', { windowsHide: true }); } catch {}
+
+      // Wait for cleanup
       try { execSync('timeout /t 3 /nobreak >nul', { windowsHide: true }); } catch {}
 
-      // Method 1: scan bin/<hash>/codex.exe
-      let launched = false;
+      if (mainExe && existsSync(mainExe)) {
+        try {
+          spawn(mainExe, [], { detached: true, stdio: "ignore" }).unref();
+          console.log(`[OpenCodex] Launched: ${mainExe}`);
+          return;
+        } catch {}
+      }
+
+      // Fallback: scan WindowsApps for Codex.exe
+      const programFiles = process.env.ProgramFiles || "C:\\Program Files";
+      const windowsApps = join(programFiles, "WindowsApps");
+      if (existsSync(windowsApps)) {
+        try {
+          const dirs = readdirSync(windowsApps).filter(d => d.startsWith("OpenAI.Codex_") && d.endsWith("_x64__2p2nqsd0c76g0"));
+          for (const dir of dirs) {
+            const candidate = join(windowsApps, dir, "app", "Codex.exe");
+            if (existsSync(candidate)) {
+              try {
+                spawn(candidate, [], { detached: true, stdio: "ignore" }).unref();
+                console.log(`[OpenCodex] Launched: ${candidate}`);
+                return;
+              } catch {}
+            }
+          }
+        } catch {}
+      }
+
+      // Last resort: scan bin/<hash>/codex.exe
       const localAppData = process.env.LOCALAPPDATA || "";
       if (localAppData) {
         const binDir = join(localAppData, "OpenAI", "Codex", "bin");
@@ -334,29 +373,12 @@ stream_idle_timeout_ms = 600000
             if (existsSync(exe)) {
               try {
                 spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
-                console.log(`[OpenCodex] Launched: ${exe}`);
-                launched = true;
-                break;
+                console.log(`[OpenCodex] Launched (helper): ${exe}`);
+                return;
               } catch {}
             }
           }
         }
-      }
-
-      // Method 2: explorer shell:AppsFolder (MSIX install)
-      if (!launched) {
-        try {
-          const appId = "OpenAI.Codex_2p2nqsd0c76g0!App";
-          execSync(`explorer.exe shell:AppsFolder\\${appId}`, { windowsHide: true, timeout: 5000 });
-          launched = true;
-        } catch {}
-      }
-
-      // Method 3: fallback start
-      if (!launched) {
-        try { execSync('start "" "codex://"', { windowsHide: true, timeout: 3000 }); } catch {}
-        try { execSync('start "" "Codex"', { windowsHide: true, timeout: 3000 }); } catch {}
-        try { execSync('start "" "codex"', { windowsHide: true, timeout: 3000 }); } catch {}
       }
     } else {
       try {
