@@ -6,10 +6,10 @@
  */
 
 import http from "node:http";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
+import { execSync, spawn } from "node:child_process";
 
 import {
   responsesToChat,
@@ -319,21 +319,44 @@ stream_idle_timeout_ms = 600000
     console.log("[OpenCodex] Executing background restart of Codex Desktop...");
     const isWin = process.platform === "win32";
     if (isWin) {
-      // Kill Codex processes (lowercase on Windows)
       try { execSync('taskkill /f /im "codex.exe" /t 2>nul', { windowsHide: true }); } catch {}
-      try { execSync('timeout /t 2 /nobreak >nul', { windowsHide: true }); } catch {}
-      // Launch Codex via multiple methods
-      const launchAttempts = [
-        'start "" "codex://"',
-        'start "" "Codex"',
-        'codex',
-        `start "" "%LOCALAPPDATA%\\OpenAI\\Codex\\bin\\codex.exe"`
-      ];
-      for (const cmd of launchAttempts) {
+      try { execSync('timeout /t 3 /nobreak >nul', { windowsHide: true }); } catch {}
+
+      // Method 1: scan bin/<hash>/codex.exe
+      let launched = false;
+      const localAppData = process.env.LOCALAPPDATA || "";
+      if (localAppData) {
+        const binDir = join(localAppData, "OpenAI", "Codex", "bin");
+        if (existsSync(binDir)) {
+          const dirs = readdirSync(binDir).filter(d => /^[a-f0-9]{16}$/.test(d));
+          for (const dir of dirs) {
+            const exe = join(binDir, dir, "codex.exe");
+            if (existsSync(exe)) {
+              try {
+                spawn(exe, [], { detached: true, stdio: "ignore" }).unref();
+                console.log(`[OpenCodex] Launched: ${exe}`);
+                launched = true;
+                break;
+              } catch {}
+            }
+          }
+        }
+      }
+
+      // Method 2: explorer shell:AppsFolder (MSIX install)
+      if (!launched) {
         try {
-          execSync(cmd, { timeout: 3000, windowsHide: true, stdio: "ignore" });
-          break;
+          const appId = "OpenAI.Codex_2p2nqsd0c76g0!App";
+          execSync(`explorer.exe shell:AppsFolder\\${appId}`, { windowsHide: true, timeout: 5000 });
+          launched = true;
         } catch {}
+      }
+
+      // Method 3: fallback start
+      if (!launched) {
+        try { execSync('start "" "codex://"', { windowsHide: true, timeout: 3000 }); } catch {}
+        try { execSync('start "" "Codex"', { windowsHide: true, timeout: 3000 }); } catch {}
+        try { execSync('start "" "codex"', { windowsHide: true, timeout: 3000 }); } catch {}
       }
     } else {
       try {
